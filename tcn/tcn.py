@@ -1,13 +1,13 @@
 from typing import List, Tuple
 
-import keras.backend as K
-import keras.layers
-from keras import optimizers
-from keras.engine.topology import Layer
-from keras.layers import Activation, Lambda
-from keras.layers import Conv1D, SpatialDropout1D
-from keras.layers import Convolution1D, Dense
-from keras.models import Input, Model
+import tf.keras.backend as K
+import tf.keras.layers
+from tf.keras import optimizers
+from tf.keras.engine.topology import Layer
+from tf.keras.layers import Activation, Lambda
+from tf.keras.layers import Conv1D, SpatialDropout1D
+from tf.keras.layers import Convolution1D, Dense
+from tf.keras.models import Input, Model
 
 
 def residual_block(x, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0):
@@ -176,32 +176,16 @@ def compiled_tcn(num_feat,  # type: int
     print('x.shape=', x.shape)
 
     def get_opt():
-        if opt == 'adam':
-            return optimizers.Adam(lr=lr, clipnorm=1.)
-        elif opt == 'rmsprop':
-            return optimizers.RMSprop(lr=lr, clipnorm=1.)
-        else:
-            raise Exception('Only Adam and RMSProp are available here')
+        
+            return tf.train.AdamOptimizer(learning_rate=1e-3, )
+        
 
     if not regression:
         # classification
         x = Dense(num_classes)(x)
         x = Activation('softmax')(x)
         output_layer = x
-        model = Model(input_layer, output_layer)
-
-        # https://github.com/keras-team/keras/pull/11373
-        # It's now in Keras@master but still not available with pip.
-        # TODO remove later.
-        def accuracy(y_true, y_pred):
-            # reshape in case it's in shape (num_samples, 1) instead of (num_samples,)
-            if K.ndim(y_true) == K.ndim(y_pred):
-                y_true = K.squeeze(y_true, -1)
-            # convert dense predictions to labels
-            y_pred_labels = K.argmax(y_pred, axis=-1)
-            y_pred_labels = K.cast(y_pred_labels, K.floatx())
-            return K.cast(K.equal(y_true, y_pred_labels), K.floatx())
-
+        model = Model(input_layer, output_layer)            
         model.compile(get_opt(), loss='sparse_categorical_crossentropy', metrics=[accuracy])
     else:
         # regression
