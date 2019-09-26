@@ -6,11 +6,11 @@ from tf.keras import optimizers
 from tf.keras.engine.topology import Layer
 from tf.keras.layers import Activation, Lambda
 from tf.keras.layers import Conv1D, SpatialDropout1D
-from tf.keras.layers import Convolution1D, Dense
+from tf.keras.layers import Convolution1D, SeparableConv1D, Dense
 from tf.keras.models import Input, Model
 
 
-def residual_block(x, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0):
+def residual_block(x, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0, use_separable=False):
     # type: (Layer, int, int, int, str, float) -> Tuple[Layer, Layer]
     """Defines the residual block for the WaveNet TCN
 
@@ -28,10 +28,17 @@ def residual_block(x, dilation_rate, nb_filters, kernel_size, padding, dropout_r
     """
     prev_x = x
     for k in range(2):
-        x = Conv1D(filters=nb_filters,
+        if use_separable==True:
+            x = SeparableConv1D(filters=nb_filters,
                    kernel_size=kernel_size,
                    dilation_rate=dilation_rate,
                    padding=padding)(x)
+        else:
+            x = Conv1D(filters=nb_filters,
+                    kernel_size=kernel_size,
+                    dilation_rate=dilation_rate,
+                    padding=padding)(x)
+
         # x = BatchNormalization()(x)  # TODO should be WeightNorm here.
         x = Activation('relu')(x)
         x = SpatialDropout1D(rate=dropout_rate)(x)
@@ -69,6 +76,7 @@ class TCN:
             padding: The padding to use in the convolutional layers, 'causal' or 'same'.
             use_skip_connections: Boolean. If we want to add skip connections from input to each residual block.
             return_sequences: Boolean. Whether to return the last output in the output sequence, or the full sequence.
+            use_separable_convolutions: Boolean. Whether to use depthwise separable convolutions or normal
             dropout_rate: Float between 0 and 1. Fraction of the input units to drop.
             name: Name of the model. Useful when having multiple TCN.
 
@@ -83,6 +91,7 @@ class TCN:
                  dilations=[1, 2, 4, 8, 16, 32],
                  padding='causal',
                  use_skip_connections=True,
+                 use_separable_convolutions=False,
                  dropout_rate=0.0,
                  return_sequences=False,
                  name='tcn'):
@@ -95,6 +104,7 @@ class TCN:
         self.kernel_size = kernel_size
         self.nb_filters = nb_filters
         self.padding = padding
+        self.use_separable_convolutions = use_separable_convolutions
 
         if padding != 'causal' and padding != 'same':
             raise ValueError("Only 'causal' or 'same' padding are compatible for this layer.")
@@ -118,7 +128,8 @@ class TCN:
                                              nb_filters=self.nb_filters,
                                              kernel_size=self.kernel_size,
                                              padding=self.padding,
-                                             dropout_rate=self.dropout_rate)
+                                             dropout_rate=self.dropout_rate,
+                                             use_separable=self.use_separable_convolutions)
                 skip_connections.append(skip_out)
         if self.use_skip_connections:
             x = keras.layers.add(skip_connections)
@@ -158,6 +169,7 @@ def compiled_tcn(num_feat,  # type: int
         use_skip_connections: Boolean. If we want to add skip connections from input to each residual block.
         return_sequences: Boolean. Whether to return the last output in the output sequence, or the full sequence.
         regression: Whether the output should be continuous or discrete.
+        use_separable_convolutions: whether to use these instead of normal conv layers for optimizing parameter count
         dropout_rate: Float between 0 and 1. Fraction of the input units to drop.
         name: Name of the model. Useful when having multiple TCN.
         opt: Optimizer name.
